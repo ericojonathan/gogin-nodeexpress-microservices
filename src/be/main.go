@@ -7,12 +7,15 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"fmt"
+	// "errors"
+	"fmt"	
 	"github.com/gin-gonic/gin"	
+	// "github.com/go-redis/redis"
 	"github.com/mergermarket/go-pkcs7"	
 	"github.com/spf13/viper"
 	"io"
 	"log"
+	// "net/http"
 	
     _ "github.com/go-sql-driver/mysql"
 	//"log"
@@ -105,6 +108,20 @@ var (
 
 func get_users_encr(c *gin.Context) {
 	
+	//cache will be based on an API Key. 
+    //access without API key will be rejected
+	key_recv := c.Query("api_key")	
+	if key_recv == "" {
+		c.Abort()
+		return;
+	}
+	
+	key_decr, _ := Decrypt(key_recv)	
+	fmt.Println(key_decr) //This is just to get the application running without error
+	//TODO: Compare keys with those listed in config
+	//api_keys := []struct {Conf.Get("app.api_keys")}
+	//fmt.Println("api_keys: " + api_keys)
+
 	fmt.Println("[GET USERS ENCRYPT]")
 
 	db_user := Conf.Get("mysql.user")
@@ -130,8 +147,7 @@ func get_users_encr(c *gin.Context) {
 			log.Fatal(err)
 		}
 
-		var emp_encr Employee
-		//emp.ID, _ = Encrypt(emp.ID)
+		var emp_encr Employee		
 		emp_encr.ID = emp.ID
 		emp_encr.Job_Title, _ = Encrypt(emp.Job_Title)		
 		emp_encr.Email_Address, _ = Encrypt(emp.Email_Address)

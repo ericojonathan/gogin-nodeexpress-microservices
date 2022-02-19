@@ -6,5 +6,15 @@
         "user": "kdigital_app",
         "pass": "kdp3456",
         "db": "kdigital"
+    },    
+    "app": {
+        "description": "This is a temporary api key storage for now.TODO: api_keys stored in database",
+        "api_keys": [
+            "33a09a853f9b33da731f4a3e839d0c55",
+            "9cfffa903e405c178c506d26b194c1f0",
+            "7ed41df0ccd7d0f27eed440b4cfdf1e3",
+            "2c64c8d73928a72c54ee2cabea76b53a",
+            "8be4d161c04396990a7db9bd6269c3e4"
+        ]
     }
 }
