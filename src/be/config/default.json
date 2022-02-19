@@ -1,0 +1,10 @@
+{
+    "crypto": {
+        "cipher_key": "a_LDm7XDLWzhAdtfKCmyBqlB4ApMYPXb"
+    },
+    "mysql" : {
+        "user": "kdigital_app",
+        "pass": "kdp3456",
+        "db": "kdigital"
+    }
+}
