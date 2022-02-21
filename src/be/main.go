@@ -8,17 +8,18 @@ import (
 	"database/sql"
 	"encoding/hex"
 	// "errors"
+	"encoding/json"
 	"fmt"	
 	"github.com/gin-gonic/gin"	
-	// "github.com/go-redis/redis"
+	"github.com/go-redis/redis"
 	"github.com/mergermarket/go-pkcs7"	
-	"github.com/spf13/viper"
-	"io"
+	"github.com/spf13/viper"	
+	"io"	
 	"log"
+	"strings"
 	// "net/http"
 	
-    _ "github.com/go-sql-driver/mysql"
-	//"log"
+    _ "github.com/go-sql-driver/mysql"	
 	// "reflect"
 )
 
@@ -106,60 +107,190 @@ var (
 //TODO: Get single function that returns db
 //func get_db() (db.SQLDB)
 
-func get_users_encr(c *gin.Context) {
-	
+type JsonType struct {
+	Array []string
+}
+
+func get_employees_encr(c *gin.Context) {
+		
 	//cache will be based on an API Key. 
     //access without API key will be rejected
 	key_recv := c.Query("api_key")	
-	if key_recv == "" {
-		c.Abort()
-		return;
+	if key_recv == "" || len(key_recv) != 128 {
+		c.Abort()		
+		c.IndentedJSON(401, gin.H{"message":"Unauthorized Access"})
+		return
 	}
 	
-	key_decr, _ := Decrypt(key_recv)	
-	fmt.Println(key_decr) //This is just to get the application running without error
-	//TODO: Compare keys with those listed in config
-	//api_keys := []struct {Conf.Get("app.api_keys")}
-	//fmt.Println("api_keys: " + api_keys)
+	key_decr, err := Decrypt(key_recv)
+	if err != nil {
+		c.Abort()
+		c.IndentedJSON(401, gin.H{"message":"Unauthorized Access"})
+		return;
+	}
 
-	fmt.Println("[GET USERS ENCRYPT]")
+	api_keys := Conf.GetStringSlice("app.api_keys")
 
+	containsKey := false
+	for _, key := range api_keys {
+		if key == key_decr {
+			containsKey = true
+			break;
+		}
+	}
+
+	if !containsKey {
+		c.Abort()
+		c.IndentedJSON(401, gin.H{"message":"Unauthorized Access"})
+		return;
+	}
+
+	//Redis operations caching, throttling, or db
+	query := c.Request.URL.Query()
+
+	avail_col := []string {"id","job_title", "email_address", "firstName_LastName"}
+	contains_col := false
+
+	qKey := ""
+	qVal := ""
+
+	for k, v := range query {
+		if k == "api_key" {
+			continue
+		}
+		if contains_col == false {
+			for _, col := range avail_col {
+				if col == k {
+					contains_col = true
+					qKey = k					
+					qVal = strings.Join(v, " ")
+				}
+			}
+		}				
+	}
+
+	// look at redis first, then database
+	if qKey != "" && qVal != "" {
+		
+		client := redis.NewClient(&redis.Options{
+			Addr: "localhost:6379",
+			Password: "",
+			DB: 0,
+		})
+
+		rKey := qKey + "=" + qVal		
+		emps := []Employee{}
+
+		//Check if key/value exists, if not, set value
+		// vResult, err := client.Get(qKey).Result()
+		result, err := client.Get(rKey).Result()		
+		if err == redis.Nil {
+			//if id, get data directly from database
+			//if qKey == "id" {}
+			fmt.Println("[DOES NOT CONTAIN DATA]")
+
+			emps = employee_query("select * from employee", qKey, qVal)
+			empsJson, err := json.Marshal(emps)
+			if err != nil {
+				c.Abort()
+				c.IndentedJSON(500, gin.H{"message":"Server Error"})
+				return;
+			}
+			
+			if qKey == "id" {
+				c.JSON(200, emps)
+				return		
+			}
+
+			err = client.SAdd(rKey, empsJson).Err()
+			if err != nil {
+				c.Abort()
+				c.IndentedJSON(500, gin.H{"message":"Server Error"})
+				return;
+			}
+										
+			c.JSON(200, emps)
+			return		
+		}		
+		
+		fmt.Println("[CONTAINs DATA]")
+		err = json.Unmarshal([]byte(result), &emps)
+		if err != nil {
+			c.Abort()
+			c.IndentedJSON(500, gin.H{"message":"Server Error"})
+			return;
+		}
+		c.JSON(200, emps)
+		return		
+	}
+
+	c.IndentedJSON(200, employee_query("select * from employee", "", ""))	
+}
+
+func employee_query(query, col, val string) ([]Employee) {
+	
 	db_user := Conf.Get("mysql.user")
 	db_pass := Conf.Get("mysql.pass")
 	db_name := Conf.Get("mysql.db")
 		
 	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(127.0.0.1:3306)/%s", db_user, db_pass, db_name))
-    if err != nil {
-        log.Fatal(err)
-    }
+	if err != nil {
+		log.Fatal(err)
+	}
 	defer db.Close()
 
-    rows, err := db.Query("select * from employee")
-    if err != nil {
-        log.Fatal(err)
-    }
-
-	emps := []Employee{}
-	for rows.Next() {
-		var emp Employee
-		err := rows.Scan(&emp.ID, &emp.Job_Title, &emp.Email_Address, &emp.FirstName_LastName)
+	emps := []Employee{}	
+	if col == "" && val == "" {
+		rows, err := db.Query("select * from employee")
 		if err != nil {
 			log.Fatal(err)
 		}
+		defer rows.Close()
 
-		var emp_encr Employee		
-		emp_encr.ID = emp.ID
-		emp_encr.Job_Title, _ = Encrypt(emp.Job_Title)		
-		emp_encr.Email_Address, _ = Encrypt(emp.Email_Address)
-		emp_encr.FirstName_LastName, _ = Encrypt(emp.FirstName_LastName)
+		for rows.Next() {
+			var emp Employee
+			err := rows.Scan(&emp.ID, &emp.Job_Title, &emp.Email_Address, &emp.FirstName_LastName)
+			if err != nil {
+				log.Fatal(err)
+			}
+	
+			var emp_encr Employee		
+			emp_encr.ID = emp.ID
+			emp_encr.Job_Title, _ = Encrypt(emp.Job_Title)		
+			emp_encr.Email_Address, _ = Encrypt(emp.Email_Address)
+			emp_encr.FirstName_LastName, _ = Encrypt(emp.FirstName_LastName)
+	
+			emps = append(emps, emp_encr)
+		}
+	} else {						
+		sql := fmt.Sprintf("select * from employee where %s like ?", col)
+		rows, err := db.Query(sql, "%" + val + "%")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
 
-		emps = append(emps, emp_encr)
+		for rows.Next() {
+			var emp Employee
+			err := rows.Scan(&emp.ID, &emp.Job_Title, &emp.Email_Address, &emp.FirstName_LastName)
+			if err != nil {
+				log.Fatal(err)
+			}
+	
+			var emp_encr Employee		
+			emp_encr.ID = emp.ID
+			emp_encr.Job_Title, _ = Encrypt(emp.Job_Title)		
+			emp_encr.Email_Address, _ = Encrypt(emp.Email_Address)
+			emp_encr.FirstName_LastName, _ = Encrypt(emp.FirstName_LastName)
+	
+			emps = append(emps, emp_encr)
+		}
 	}
-
-	c.JSON(200, emps)
+		
+	return emps
 }
 
-func get_users(c *gin.Context) {
+func get_employees(c *gin.Context) {
 	
 	fmt.Println("[GET USERS]")
 
@@ -217,7 +348,7 @@ func main() {
 	r := gin.Default()
 
 	r.GET("/", home)
-	r.GET("/get_users", get_users)	
-	r.GET("/get_users_encr", get_users_encr)	
+	r.GET("/get_employees", get_employees)	
+	r.GET("/get_employees_encr", get_employees_encr)	
 	r.Run(":3000")
 }
