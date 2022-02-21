@@ -1,0 +1,29 @@
+{
+  "app": {
+    "api_key": "9cfffa903e405c178c506d26b194c1f0"
+  },
+  "be": {
+    "host": "0.0.0.0",
+    "port": 3000
+  },
+  "async": {
+    "api_key": "33a09a853f9b33da731f4a3e839d0c55",
+    "host": "0.0.0.0",
+    "port": 3001
+  },
+  "crypto": {
+    "algorithm": "aes-256-cbc",
+    "cipher_key": "a_LDm7XDLWzhAdtfKCmyBqlB4ApMYPXb",
+    "block_size": 16
+  },
+
+  "redis": {
+      "host": "0.0.0.0",
+      "port": 6379
+  },
+
+  "server": {
+    "host": "0.0.0.0",
+    "port": 3002
+  }    
+}

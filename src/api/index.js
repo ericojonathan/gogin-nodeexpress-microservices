@@ -309,4 +309,79 @@ app.get('/employees', (req, res) => {
     })
 });
 
+//Inter-service communication using sync and async communication
+app.get('/employees_async', async (req, res) => {
+    //cache will be based on an API Key. 
+    //access without API key will be rejected
+    let key_recv_primary = req.query.api_key_primary;
+    if(key_recv_primary === undefined || key_recv_primary === null || key_recv_primary =='' || key_recv_primary != api_key) {
+        res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
+        return;
+    }
+
+    let api_key_async = config.get('async.api_key');
+    let key_recv_async = req.query.api_key_secondary;
+    if(key_recv_async === undefined || key_recv_async === null || key_recv_async =='' || key_recv_async != api_key_async) {
+        res.status(401).send("Unauthorized access! Please use your secondary API Key to use this async service.")
+        return;
+    }
+
+    let query_length = Object.keys(req.query).length;
+    if(query_length > 2) {
+        res.status(400).send("<h1>Query error!</h1><p>For now, query is based on <b>one</b> key=value only.</p><p>E.g. job_title=Manager. job_title=Manager&email=example@example.com will produce this query error.</p>")
+        return;
+    }
+
+    //Values from config file
+    let async_host = config.get("async.host");
+    let async_port = config.get("async.port");
+    let url = `http://${async_host}:${async_port}/employees?`;
+
+    if(query_length > 1) {
+        //iterates
+        for(key in req.query) {
+            if(key =="api_key") {                                
+                continue;
+            }
+            url += `${key}=${req.query[key]}&`;
+        }        
+    }
+
+    url += `api_key=${api_key_async}`;
+    request(url, function (error, response, body) {
+        
+        if(error !== null) {
+            console.log("error.status: " + error.status)
+            res.status(error.status || 500).send({
+                error: {
+                  status: error.status || 500,
+                  message: 'Service Error',
+                },
+            });
+            return;
+        } else if(error === null && body.trim() =='') {
+            res.status(404).send({
+                error: {
+                  status: 404,
+                  message: 'Not Found',
+                },
+            });
+            return;
+        }
+                
+        let data = JSON.parse(body);    
+        
+        // for(let i = 0; i < data.length; i++) {
+        //     let obj = data[i];
+        //     for(let key in obj) {
+        //         if(key != "id") {
+        //             obj[key] = decrypt(obj[key]);
+        //         }
+        //     }
+        // }
+
+        res.json(data)        
+    })
+})
+
 app.listen(port, () => console.log(`api 1 listening on port ${port}!`))
