@@ -97,6 +97,7 @@ app.get('/get_employees_decr', (req, res) => {
     request(url, function (error, response, body) {
         
         if(error !== null) {
+            console.log("error.status: " + error.status)
             res.status(error.status || 500).send({
                 error: {
                   status: error.status || 500,
@@ -125,9 +126,7 @@ app.get('/get_employees_decr', (req, res) => {
             }
         }
 
-        if (!error && response.statusCode == 200) {
-            res.json(data)
-        }
+        res.json(data)        
     })
 });
 
