@@ -68,7 +68,136 @@ app.get('/employees_unencr', (req, res) => {
     })
 });
 
-app.post('/employees', (req, res) => {    
+app.delete('/employees', (req, res) => {
+    //cache will be based on an API Key. 
+    //access without API key will be rejected
+    let key_recv = req.query.api_key;    
+    console.log("key: " + key_recv);    
+    if(key_recv === undefined || key_recv === null || key_recv =='' || key_recv != api_key) {
+        res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
+        return;
+    }
+    let emp_id = req.query.emp_id;    
+    if(emp_id === undefined || emp_id == '') {
+        res.status(400).send("Bad Request!")
+        return;
+    }
+
+    var data = JSON.stringify({
+        id: emp_id        
+    });
+
+    var options = {
+        host: 'localhost',
+        port: 3000,
+        path: '/employees_encr',
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(data)
+        }
+    };
+
+    var httpreq = http.request(options, function (response) {
+        response.setEncoding('utf8');
+        response.on('data', function (chunk) {
+          console.log(chunk);
+        });
+        response.on('end', function() {
+          res.send('ok');
+
+        });        
+    });
+    
+    httpreq.on('error', function (e) {
+        res.status(400).send("Bad Request!")
+        return;
+    });
+
+    httpreq.on('timeout', function(e){
+        res.status(400).send("Bad Request!")
+        return;
+    });
+
+    httpreq.setTimeout(5000);
+    httpreq.write(data);
+    httpreq.end();     
+
+    console.log("deleting id: " + emp_id);
+    // res.json({"message": "data deleted!"});
+    return;
+});
+
+app.put('/employees', (req, res) => {
+    //cache will be based on an API Key. 
+    //access without API key will be rejected
+    console.log("[UPDATING EMPLOYEES]")
+    let key_recv = req.body.api_key;
+    console.log("key_recv: " + key_recv);
+    if(key_recv === undefined || key_recv === null || key_recv =='' || key_recv != api_key) {
+        res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
+        return;
+    }
+
+    let emp_id = req.body.emp_id;
+    let job_title = req.body.job_title;
+    let email_address = req.body.email_address;
+    let firstName_LastName = req.body.firstName_LastName;
+    
+    if(emp_id === undefined || job_title === undefined || email_address === undefined || firstName_LastName === undefined ) {
+        console.log("ERROR: undefined");
+        res.status(400).send("<h1>Update error!</h1><p>E.g. job_title, email_address and firstName_LastNames fields are required.</p>")
+        return;
+    }
+
+    //email address format
+    //other checks, e.g. acceptable job titles, etc.
+    emp_id = encrypt(emp_id)
+    job_title = encrypt(job_title);
+    email_address = encrypt(email_address);
+    firstName_LastName = encrypt(firstName_LastName);
+    
+    var data = JSON.stringify({
+        id: emp_id,
+        job_title: job_title,
+        email_address: email_address,
+        firstName_LastName: firstName_LastName
+    });
+
+    var options = {
+        host: 'localhost',
+        port: 3000,
+        path: '/employees_encr',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(data)
+        }
+    };
+
+    var httpreq = http.request(options, function (response) {
+        response.setEncoding('utf8');
+        response.on('data', function (chunk) {
+          console.log(chunk);
+        });
+        response.on('end', function() {
+          res.send('ok');
+        })
+    });
+    
+    httpreq.write(data);
+    httpreq.end();     
+});
+
+app.post('/employees', (req, res) => {
+    //cache will be based on an API Key. 
+    //access without API key will be rejected
+    let key_recv = req.body.api_key;
+    if(key_recv === undefined || key_recv === null || key_recv =='' || key_recv != api_key) {
+        res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
+        return;
+    }
+
     let job_title = req.body.job_title;
     let email_address = req.body.email_address;
     let firstName_LastName = req.body.firstName_LastName;
@@ -92,7 +221,7 @@ app.post('/employees', (req, res) => {
     });
 
     var options = {
-        host: '192.168.100.53',
+        host: 'localhost',
         port: 3000,
         path: '/employees_encr',
         method: 'POST',

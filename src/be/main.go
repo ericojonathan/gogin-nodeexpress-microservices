@@ -119,14 +119,132 @@ type RedisResult struct {
 // 	return false
 // }
 
+func delete_employees_encr(c *gin.Context) {
+	
+	type empTmp struct {
+		// Api_Key string `json:"api_key"` //TODO
+		ID string `json:"id"`		
+	}
+
+	emp := empTmp{}
+
+	if err := c.BindJSON(&emp); err != nil {
+	    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return	
+	}
+
+	fmt.Println("DELETING:", emp.ID)
+
+	db_user := Conf.Get("mysql.user")
+	db_pass := Conf.Get("mysql.pass")
+	db_name := Conf.Get("mysql.db")
+		
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(127.0.0.1:3306)/%s", db_user, db_pass, db_name))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("DELETE FROM employee WHERE id = ?")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(emp.ID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+
+	fmt.Println("[EMPLOYEE] DELETED")
+	c.JSON(200, gin.H{"message": "Deleted!"})
+}
+
+func put_employees_encr(c *gin.Context) {
+	var (
+		err error
+	)
+
+	fmt.Println("[UPDATING EMPLOYEE]")
+
+	type empTmp struct {
+		// Api_Key string `json:"api_key"` //TODO
+		ID string `"json:id"`
+		Job_Title string `json:"job_title"`
+		Email_Address string `json:"email_address"`
+		FirstName_LastName string `json:"firstName_LastName"`
+	}
+
+	emp := empTmp{}
+
+	if err := c.BindJSON(&emp); err != nil {
+	    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return	
+	}
+
+	emp.ID, err = Decrypt(emp.ID)
+	if err != nil {
+        c.JSON(500, gin.H{"error": "Server error!"})
+        return
+    }
+
+	emp.Job_Title, err = Decrypt(emp.Job_Title)
+	if err != nil {
+        c.JSON(500, gin.H{"error": "Server error!"})
+        return
+    }
+
+	emp.Email_Address, err = Decrypt(emp.Email_Address)
+	if err != nil {
+        c.JSON(500, gin.H{"error": "Server error!"})
+        return
+    }
+
+	emp.FirstName_LastName, err = Decrypt(emp.FirstName_LastName)
+	if err != nil {
+        c.JSON(500, gin.H{"error": "Server error!"})
+        return
+    }	
+	
+	db_user := Conf.Get("mysql.user")
+	db_pass := Conf.Get("mysql.pass")
+	db_name := Conf.Get("mysql.db")
+		
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(127.0.0.1:3306)/%s", db_user, db_pass, db_name))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("UPDATE employee SET job_title=?, email_address=?, firstName_LastName=? WHERE id=?")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(emp.Job_Title, emp.Email_Address, emp.FirstName_LastName, emp.ID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+
+	c.JSON(200, gin.H{"message": "Data Updated!"})
+}
+
 func post_employees_encr(c *gin.Context) {
-	var(
+	var (
 		err error
 	)
 
 	fmt.Println("[POSTING EMPLOYEE]")
 
 	type empTmp struct {
+		// Api_Key string `json:"api_key"` //TODO
 		Job_Title string `json:"job_title"`
 		Email_Address string `json:"email_address"`
 		FirstName_LastName string `json:"firstName_LastName"`
@@ -442,6 +560,8 @@ func main() {
 	r.GET("/", home)
 	r.GET("/employees_unencr", get_employees_unencr)	
 	r.GET("/employees_encr", get_employees_encr)
-	r.POST("/employees_encr", post_employees_encr)	
+	r.POST("/employees_encr", post_employees_encr)
+	r.PUT("/employees_encr", put_employees_encr)
+	r.DELETE("/employees_encr", delete_employees_encr)
 	r.Run(":3000")
 }
