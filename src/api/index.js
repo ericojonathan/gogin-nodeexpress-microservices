@@ -1,6 +1,7 @@
 const config = require('config');
 const crypto = require('crypto');
 const express = require('express');
+var http = require('http');
 const request = require('request');
 const querystring = require('querystring');
 const url = require('url');
@@ -17,6 +18,7 @@ const cipher_key = config.get('crypto.cipher_key');
 const block_size = config.get('crypto.block_size');
 
 const app = express();
+app.use(express.json());
 
 function encrypt(plainText) {
     const iv = crypto.randomBytes(block_size);
@@ -47,15 +49,15 @@ app.get('/', (req, res) => {
     res.json({
         name: 'api 1',
         services: [
-            '/get_employees',
+            '/employees',
             // '/get_employees_encr',
-            '/get_employees_decr',
+            '/employees_unecr',
         ],
     });
 });
 
-app.get('/get_employees', (req, res) => {
-    let url = `http://${be_host}:${be_port}/get_employees`;
+app.get('/employees_unencr', (req, res) => {
+    let url = `http://${be_host}:${be_port}/employees_unencr`;
 
     request(url, function (error, response, body) {        
         let data = JSON.parse(body)
@@ -66,7 +68,55 @@ app.get('/get_employees', (req, res) => {
     })
 });
 
-app.get('/get_employees_decr', (req, res) => {
+app.post('/employees', (req, res) => {    
+    let job_title = req.body.job_title;
+    let email_address = req.body.email_address;
+    let firstName_LastName = req.body.firstName_LastName;
+
+    if(job_title === undefined || email_address === undefined || firstName_LastName === undefined ) {
+        res.status(400).send("<h1>Post error!</h1><p>E.g. job_title, email_address and firstName_LastNames fields are required.</p>")
+        return;
+    }
+
+    //email address format
+    //other checks, e.g. acceptable job titles, etc.
+
+    job_title = encrypt(job_title);
+    email_address = encrypt(email_address);
+    firstName_LastName = encrypt(firstName_LastName);
+    
+    var data = JSON.stringify({
+        job_title: job_title,
+        email_address: email_address,
+        firstName_LastName: firstName_LastName
+    });
+
+    var options = {
+        host: '192.168.100.53',
+        port: 3000,
+        path: '/employees_encr',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(data)
+        }
+    };
+
+    var httpreq = http.request(options, function (response) {
+        response.setEncoding('utf8');
+        response.on('data', function (chunk) {
+          console.log(chunk);
+        });
+        response.on('end', function() {
+          res.send('ok');
+        })
+    });
+    
+    httpreq.write(data);
+    httpreq.end();     
+});
+
+app.get('/employees', (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
     let key_recv = req.query.api_key;
@@ -82,7 +132,7 @@ app.get('/get_employees_decr', (req, res) => {
     }
 
     let key_encr = encrypt(api_key);
-    let url = `http://${be_host}:${be_port}/get_employees_encr?`;
+    let url = `http://${be_host}:${be_port}/employees_encr?`;
     
     if(query_length > 1) {
         //iterates

@@ -15,10 +15,11 @@ import (
 	"github.com/go-redis/redis_rate/v9"
 	"github.com/mergermarket/go-pkcs7"	
 	"github.com/spf13/viper"	
-	"io"	
+	"io"
+	// "io/ioutil"
 	"log"
 	"strings"
-	// "net/http"
+	"net/http"
 	
     _ "github.com/go-sql-driver/mysql"	
 	// "reflect"
@@ -87,15 +88,16 @@ func Decrypt(encrypted string) (string, error) {
 	return fmt.Sprintf("%s", cipherText), nil
 }
 
-func test_encr_msg(c *gin.Context) {
+// Moved to main_test.go
+// func test_encr_msg(c *gin.Context) {
 
-	var data = "this is sensitive data"
-	data_encr, _ := Encrypt(data)
+// 	var data = "this is sensitive data"
+// 	data_encr, _ := Encrypt(data)
 	
-	c.JSON(200, gin.H{
-		"message": data_encr,
-	})
-}
+// 	c.JSON(200, gin.H{
+// 		"message": data_encr,
+// 	})
+// }
 
 type Employee struct {
 	ID int `json:"id"`
@@ -110,6 +112,76 @@ type JsonType struct {
 
 type RedisResult struct {
 	Result []Employee `json:"result"`
+}
+
+// TODO
+// func api_key_verified(key string) bool {
+// 	return false
+// }
+
+func post_employees_encr(c *gin.Context) {
+	var(
+		err error
+	)
+
+	fmt.Println("[POSTING EMPLOYEE]")
+
+	type empTmp struct {
+		Job_Title string `json:"job_title"`
+		Email_Address string `json:"email_address"`
+		FirstName_LastName string `json:"firstName_LastName"`
+	}
+
+	emp := empTmp{}
+
+	if err := c.BindJSON(&emp); err != nil {
+	    c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return	
+	}
+
+	emp.Job_Title, err = Decrypt(emp.Job_Title)
+	if err != nil {
+        c.JSON(500, gin.H{"error": "Server error!"})
+        return
+    }
+
+	emp.Email_Address, err = Decrypt(emp.Email_Address)
+	if err != nil {
+        c.JSON(500, gin.H{"error": "Server error!"})
+        return
+    }
+
+	emp.FirstName_LastName, err = Decrypt(emp.FirstName_LastName)
+	if err != nil {
+        c.JSON(500, gin.H{"error": "Server error!"})
+        return
+    }	
+	
+	db_user := Conf.Get("mysql.user")
+	db_pass := Conf.Get("mysql.pass")
+	db_name := Conf.Get("mysql.db")
+		
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(127.0.0.1:3306)/%s", db_user, db_pass, db_name))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+	defer db.Close()
+
+	stmt, err := db.Prepare("INSERT INTO employee(job_title, email_address, firstName_LastName) VALUES(?, ?, ? )")
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(emp.Job_Title, emp.Email_Address, emp.FirstName_LastName)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Server error!"})
+        return
+	}
+
+	c.JSON(200, gin.H{"message": "Data Posted!"})
 }
 
 func get_employees_encr(c *gin.Context) {
@@ -137,8 +209,7 @@ func get_employees_encr(c *gin.Context) {
 	for _, key := range api_keys {
 		if key == key_decr {
 			containsKey = true
-			api_key_curr = key
-			fmt.Println(api_key_curr)
+			api_key_curr = key			
 			break;
 		}
 	}
@@ -156,15 +227,13 @@ func get_employees_encr(c *gin.Context) {
 		DB: 0,
 	})
 
-	// _ = client.FlushDB(ctx).Err()
-
-	//throttling
+	//Redis throttling
 	limiter := redis_rate.NewLimiter(client)
 	res, err := limiter.Allow(ctxBg, api_key_curr, redis_rate.PerMinute(3))
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("allowed", res.Allowed, "remaining", res.Remaining)
+	fmt.Println("Redis Throttling: allowed", res.Allowed, "remaining", res.Remaining)
 	
 	if res.Allowed == 0 {
 		c.Abort()
@@ -200,15 +269,11 @@ func get_employees_encr(c *gin.Context) {
 				
 		rKey := qKey + "=" + qVal		
 		emps := []Employee{}
-
-		//Check if key/value exists, if not, set value
-		// vResult, err := client.Get(qKey).Result()		
+		
 		result, err := client.Get(ctxBg, rKey).Result()		
-		if err == redis.Nil {
-			//if id, get data directly from database
-			//if qKey == "id" {}
-			fmt.Println("[DOES NOT CONTAIN DATA]")
-
+		if err == redis.Nil {			
+			fmt.Println("[DATA NOT IN REDIS]")
+			fmt.Println("Fetching data from db.")
 			emps = employee_query("select * from employee", qKey, qVal)
 			empsJson, err := json.Marshal(emps)
 			if err != nil {
@@ -236,12 +301,9 @@ func get_employees_encr(c *gin.Context) {
 			c.JSON(200, emps)
 			return		
 		}		
-		
-		// redisResult := RedisResult{}
-		fmt.Println("[CONTAINs DATA]")		
-		// err = json.Unmarshal([]byte(result), &redisResult)
-		err = json.Unmarshal([]byte(result), &emps)
-		//emps = redisResult.Result
+				
+		fmt.Println("[DATA FROM REDIS]")				
+		err = json.Unmarshal([]byte(result), &emps)		
 		if err != nil {
 			fmt.Println("[REDIS ERROR]")
 			fmt.Println(err)
@@ -249,8 +311,7 @@ func get_employees_encr(c *gin.Context) {
 			c.IndentedJSON(500, gin.H{"message":"Server Error"})
 			return;
 		}
-		c.JSON(200, emps)
-		// c.JSON(200, redisResult)
+		c.JSON(200, emps)		
 		return		
 	}
 
@@ -321,7 +382,7 @@ func employee_query(query, col, val string) ([]Employee) {
 	return emps
 }
 
-func get_employees(c *gin.Context) {
+func get_employees_unencr(c *gin.Context) {
 	
 	fmt.Println("[GET USERS]")
 
@@ -379,7 +440,8 @@ func main() {
 	r := gin.Default()
 
 	r.GET("/", home)
-	r.GET("/get_employees", get_employees)	
-	r.GET("/get_employees_encr", get_employees_encr)	
+	r.GET("/employees_unencr", get_employees_unencr)	
+	r.GET("/employees_encr", get_employees_encr)
+	r.POST("/employees_encr", post_employees_encr)	
 	r.Run(":3000")
 }
