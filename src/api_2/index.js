@@ -245,7 +245,7 @@ app.post('/employees', (req, res) => {
     httpreq.end();     
 });
 
-app.get('/employees', async (req, res) => {
+app.get('/employees', (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
     console.log("[get /employees]")
@@ -275,7 +275,7 @@ app.get('/employees', async (req, res) => {
     } 
 
     url += `api_key=${key_encr}`;    
-    await request(url, function (error, response, body) {
+    request(url, function (error, response, body) {
         
         if(error !== null) {
             console.log("error.status: " + error.status)
@@ -351,7 +351,7 @@ app.get('/employees_isc', async (req, res) => {
     }
 
     url += `api_key=${api_key_isc}`;
-    request(url, function (error, response, body) {
+    await request(url, function (error, response, body) {
         
         if(error !== null) {
             console.log("error.status: " + error.status)

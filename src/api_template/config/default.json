@@ -6,7 +6,7 @@
     "host": "0.0.0.0",
     "port": 3000
   },
-  "async": {
+  "isc": {
     "api_key": "9cfffa903e405c178c506d26b194c1f0",
     "host": "0.0.0.0",
     "port": 3002

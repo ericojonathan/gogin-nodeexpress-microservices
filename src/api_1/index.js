@@ -351,7 +351,7 @@ app.get('/employees_isc', async (req, res) => {
     }
 
     url += `api_key=${api_key_isc}`;
-    request(url, function (error, response, body) {
+    await request(url, function (error, response, body) {
         
         if(error !== null) {
             console.log("error.status: " + error.status)
