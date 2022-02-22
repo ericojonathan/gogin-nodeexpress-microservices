@@ -245,7 +245,7 @@ app.post('/employees', (req, res) => {
     httpreq.end();     
 });
 
-app.get('/employees', (req, res) => {
+app.get('/employees', async (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
     console.log("[get /employees]")
@@ -261,13 +261,9 @@ app.get('/employees', (req, res) => {
         return;
     }
 
-    console.log("[TEST 1]")
-
     let key_encr = encrypt(api_key);
     let url = `http://${be_host}:${be_port}/employees_encr?`;
-    
-    console.log("url_1: " + url);
-
+        
     if(query_length > 1) {
         //iterates
         for(key in req.query) {
@@ -277,9 +273,9 @@ app.get('/employees', (req, res) => {
             url += `${key}=${req.query[key]}&`;
         }        
     } 
-    url += `api_key=${key_encr}`;
-    console.log("url_2: " + url);
-    request(url, function (error, response, body) {
+
+    url += `api_key=${key_encr}`;    
+    await request(url, function (error, response, body) {
         
         if(error !== null) {
             console.log("error.status: " + error.status)
@@ -315,19 +311,20 @@ app.get('/employees', (req, res) => {
     })
 });
 
-//Inter-service communication using sync and async communication
-app.get('/employees_async', async (req, res) => {
+//Inter-service communication (isc) using sync and async communication
+app.get('/employees_isc', async (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
-    let key_recv_primary = req.query.api_key_primary;
+    console.log("[get /employees_isc]")
+    let key_recv_primary = req.body.api_key_primary;
     if(key_recv_primary === undefined || key_recv_primary === null || key_recv_primary =='' || key_recv_primary != api_key) {
         res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
         return;
     }
 
-    let api_key_async = config.get('async.api_key');
-    let key_recv_async = req.query.api_key_secondary;
-    if(key_recv_async === undefined || key_recv_async === null || key_recv_async =='' || key_recv_async != api_key_async) {
+    let api_key_isc = config.get('isc.api_key');
+    let key_recv_isc = req.body.api_key_secondary;
+    if(key_recv_isc === undefined || key_recv_isc === null || key_recv_isc =='' || key_recv_isc != api_key_isc) {
         res.status(401).send("Unauthorized access! Please use your secondary API Key to use this async service.")
         return;
     }
@@ -339,9 +336,9 @@ app.get('/employees_async', async (req, res) => {
     }
 
     //Values from config file
-    let async_host = config.get("async.host");
-    let async_port = config.get("async.port");
-    let url = `http://${async_host}:${async_port}/employees?`;
+    let isc_host = config.get("isc.host");
+    let isc_port = config.get("isc.port");
+    let url = `http://${isc_host}:${isc_port}/employees?`;
 
     if(query_length > 1) {
         //iterates
@@ -353,7 +350,7 @@ app.get('/employees_async', async (req, res) => {
         }        
     }
 
-    url += `api_key=${api_key_async}`;
+    url += `api_key=${api_key_isc}`;
     request(url, function (error, response, body) {
         
         if(error !== null) {

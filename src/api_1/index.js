@@ -310,8 +310,8 @@ app.get('/employees', (req, res) => {
     })
 });
 
-//Inter-service communication using sync and async communication
-app.get('/employees_async', async (req, res) => {
+//Inter-service communication (isc) using sync and async communication
+app.get('/employees_isc', async (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
     let key_recv_primary = req.body.api_key_primary;    
@@ -321,11 +321,11 @@ app.get('/employees_async', async (req, res) => {
         return;
     }
 
-    let api_key_async = config.get('async.api_key');
-    let key_recv_async = req.body.api_key_secondary;
-    console.log("key_recv_async: " + key_recv_async);
-    if(key_recv_async === undefined || key_recv_async === null || key_recv_async =='' || key_recv_async != api_key_async) {
-        res.status(401).send("Unauthorized access! Please use your secondary API Key to use this async service.")
+    let api_key_isc = config.get('isc.api_key');
+    let key_recv_isc = req.body.api_key_secondary;
+    console.log("key_recv_isc: " + key_recv_isc);
+    if(key_recv_isc === undefined || key_recv_isc === null || key_recv_isc =='' || key_recv_isc != api_key_isc) {
+        res.status(401).send("Unauthorized access! Please use your secondary API Key to use this inter service communicate service.")
         return;
     }
 
@@ -336,9 +336,9 @@ app.get('/employees_async', async (req, res) => {
     }
 
     //Values from config file
-    let async_host = config.get("async.host");
-    let async_port = config.get("async.port");
-    let url = `http://${async_host}:${async_port}/employees?`;
+    let isc_host = config.get("isc.host");
+    let isc_port = config.get("isc.port");
+    let url = `http://${isc_host}:${isc_port}/employees?`;
 
     if(query_length > 1) {
         //iterates
@@ -350,7 +350,7 @@ app.get('/employees_async', async (req, res) => {
         }        
     }
 
-    url += `api_key=${api_key_async}`;
+    url += `api_key=${api_key_isc}`;
     request(url, function (error, response, body) {
         
         if(error !== null) {
