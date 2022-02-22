@@ -119,6 +119,150 @@ type RedisResult struct {
 // 	return false
 // }
 
+func get_employee_encr(c *gin.Context) {
+		
+	//cache will be based on an API Key. 
+    //access without API key will be rejected
+	key_recv := c.Query("api_key")	
+	if key_recv == "" || len(key_recv) != 128 {
+		c.Abort()		
+		c.IndentedJSON(401, gin.H{"message":"Unauthorized Access"})
+		return
+	}
+	
+	key_decr, err := Decrypt(key_recv)
+	if err != nil {
+		c.Abort()
+		c.IndentedJSON(401, gin.H{"message":"Unauthorized Access"})
+		return;
+	}
+
+	api_keys := Conf.GetStringSlice("app.api_keys")
+	var api_key_curr string
+	containsKey := false
+
+	for _, key := range api_keys {
+		if key == key_decr {
+			containsKey = true
+			api_key_curr = key			
+			break;
+		}
+	}
+
+	if !containsKey {
+		c.Abort()
+		c.IndentedJSON(401, gin.H{"message":"Unauthorized Access"})
+		return;
+	}
+
+	//Redis operations caching, throttling, or db
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		Password: "",
+		DB: 0,
+	})
+
+	//Redis throttling
+	limiter := redis_rate.NewLimiter(client)
+	res, err := limiter.Allow(ctxBg, api_key_curr, redis_rate.PerMinute(3))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Redis Throttling: allowed", res.Allowed, "remaining", res.Remaining)
+	
+	if res.Allowed == 0 {
+		c.Abort()
+		c.IndentedJSON(429, gin.H{"message":"Rate limit has been reached! Please wait for a minute or two and try again."})
+		return;
+	}
+
+	query := c.Request.URL.Query()
+
+	avail_col := []string {"id","job_title", "email_address", "firstName_LastName"}
+	contains_col := false
+
+	qKey := ""
+	qVal := ""
+
+	for k, v := range query {
+		if k == "api_key" {
+			continue
+		}
+		if contains_col == false {
+			for _, col := range avail_col {
+				if col == k {
+					contains_col = true
+					qKey = k					
+					qVal = strings.Join(v, " ")
+				}
+			}
+		}				
+	}
+
+	if !contains_col {
+		c.Abort()
+		c.IndentedJSON(400, gin.H{"message":"At least one column must be included in the query."})
+		return;
+	}
+
+	//TODO: Remove this as this search is limited as key and value must exists for this search
+	// look at redis first, then database
+	if qKey != "" && qVal != "" {
+				
+		rKey := qKey + "=" + qVal		
+		emps := []Employee{}
+				
+
+		result, err := client.Get(ctxBg, rKey).Result()		
+		if err == redis.Nil {			
+			fmt.Println("[DATA NOT IN REDIS]")
+			fmt.Println("Fetching data from db.")
+			emps = employee_query("select * from employee", qKey, qVal, "1")
+			empsJson, err := json.Marshal(emps)
+			if err != nil {
+				fmt.Println("[REDIS ERROR]")
+				fmt.Println(err)
+				c.Abort()
+				c.IndentedJSON(500, gin.H{"message":"Server Error"})
+				return;
+			}
+			
+			if qKey == "id" {
+				c.JSON(200, emps)
+				return		
+			}
+
+			err = client.Set(ctxBg, rKey, empsJson, 0).Err()
+			if err != nil {
+				fmt.Println("[REDIS ERROR]")
+				fmt.Println(err)
+				c.Abort()
+				c.IndentedJSON(500, gin.H{"message":"Server Error"})
+				return;
+			}
+										
+			c.JSON(200, emps)
+			return		
+		}		
+				
+		fmt.Println("[DATA FROM REDIS]")		
+		err = json.Unmarshal([]byte(result), &emps)		
+		if err != nil {
+			fmt.Println("[REDIS ERROR]")
+			fmt.Println(err)
+			c.Abort()
+			c.IndentedJSON(500, gin.H{"message":"Server Error"})
+			return;
+		}
+		c.JSON(200, emps[0])		
+		return		
+	}
+
+	//TODO: Remove this as this search is limited as key and value must exists for this search
+	c.IndentedJSON(200, employee_query("select * from employee", "", "", ""))	
+	return
+}
+
 func delete_employees_encr(c *gin.Context) {
 	
 	type empTmp struct {
@@ -392,7 +536,7 @@ func get_employees_encr(c *gin.Context) {
 		if err == redis.Nil {			
 			fmt.Println("[DATA NOT IN REDIS]")
 			fmt.Println("Fetching data from db.")
-			emps = employee_query("select * from employee", qKey, qVal)
+			emps = employee_query("select * from employee", qKey, qVal, "")
 			empsJson, err := json.Marshal(emps)
 			if err != nil {
 				fmt.Println("[REDIS ERROR]")
@@ -420,11 +564,11 @@ func get_employees_encr(c *gin.Context) {
 			return		
 		}		
 				
-		fmt.Println("[DATA FROM REDIS]")				
+		fmt.Println("[DATA FROM REDIS]")		
 		err = json.Unmarshal([]byte(result), &emps)		
 		if err != nil {
 			fmt.Println("[REDIS ERROR]")
-			fmt.Println(err)
+			fmt.Println(err)			
 			c.Abort()
 			c.IndentedJSON(500, gin.H{"message":"Server Error"})
 			return;
@@ -433,11 +577,11 @@ func get_employees_encr(c *gin.Context) {
 		return		
 	}
 
-	c.IndentedJSON(200, employee_query("select * from employee", "", ""))	
+	c.IndentedJSON(200, employee_query("select * from employee", "", "", ""))	
 	return
 }
 
-func employee_query(query, col, val string) ([]Employee) {
+func employee_query(query, col, val, limit string) ([]Employee) {
 	
 	db_user := Conf.Get("mysql.user")
 	db_pass := Conf.Get("mysql.pass")
@@ -474,6 +618,9 @@ func employee_query(query, col, val string) ([]Employee) {
 		}
 	} else {						
 		sql := fmt.Sprintf("select * from employee where %s like ?", col)
+		if limit != "" {
+			sql += " order by id limit 1"
+		}
 		rows, err := db.Query(sql, "%" + val + "%")
 		if err != nil {
 			log.Fatal(err)
@@ -559,6 +706,7 @@ func main() {
 
 	r.GET("/", home)
 	r.GET("/employees_unencr", get_employees_unencr)	
+	r.GET("/employee_encr", get_employee_encr)
 	r.GET("/employees_encr", get_employees_encr)
 	r.POST("/employees_encr", post_employees_encr)
 	r.PUT("/employees_encr", put_employees_encr)

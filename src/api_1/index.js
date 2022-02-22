@@ -1,8 +1,10 @@
+const axios = require('axios').default;
 const config = require('config');
 const crypto = require('crypto');
 const express = require('express');
-var http = require('http');
-const request = require('request');
+var http = require('http'); 
+const request = require('request'); //deprecated. Switching to axios
+const sync_request = require('sync-request');
 const querystring = require('querystring');
 const url = require('url');
 const { query } = require('express');
@@ -55,6 +57,7 @@ app.get('/', (req, res) => {
         ],
     });
 });
+
 
 app.get('/employees_unencr', (req, res) => {
     let url = `http://${be_host}:${be_port}/employees_unencr`;
@@ -245,6 +248,71 @@ app.post('/employees', (req, res) => {
     httpreq.end();     
 });
 
+app.get('/employee', (req, res) => {
+    //cache will be based on an API Key. 
+    //access without API key will be rejected
+    console.log("[get /employee]")
+    let key_recv = req.query.api_key;
+    if(key_recv === undefined || key_recv === null || key_recv =='' || key_recv != api_key) {
+        res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
+        return;
+    }
+
+    let query_length = Object.keys(req.query).length;
+    if(query_length > 2) {
+        res.status(400).send("<h1>Query error!</h1><p>For now, query is based on <b>one</b> key=value only.</p><p>E.g. job_title=Manager. job_title=Manager&email=example@example.com will produce this query error.</p>")
+        return;
+    }
+
+    let key_encr = encrypt(api_key);
+    let url = `http://${be_host}:${be_port}/employee_encr?`;
+    
+    if(query_length > 1) {
+        //iterates
+        for(key in req.query) {
+            if(key =="api_key") {                                
+                continue;
+            }
+            url += `${key}=${req.query[key]}&`;
+        }        
+    } 
+    url += `api_key=${key_encr}`;
+    request(url, function (error, response, body) {
+        
+        if(error !== null) {
+            console.log("error.status: " + error.status)
+            res.status(error.status || 500).send({
+                error: {
+                  status: error.status || 500,
+                  message: 'Service Error',
+                },
+            });
+            return;
+        } else if(error === null && body.trim() =='') {
+            res.status(404).send({
+                error: {
+                  status: 404,
+                  message: 'Not Found',
+                },
+            });
+            return;
+        }
+                
+        let data = JSON.parse(body);    
+        
+        for(let i = 0; i < data.length; i++) {
+            let obj = data[i];
+            for(let key in obj) {
+                if(key != "id") {
+                    obj[key] = decrypt(obj[key]);
+                }
+            }
+        }
+
+        res.json(data)        
+    })
+});
+
 app.get('/employees', (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
@@ -311,6 +379,62 @@ app.get('/employees', (req, res) => {
 });
 
 //Inter-service communication (isc) using sync and async communication
+//Sync service return one employee only
+
+app.get('/employee_isc', (req, res) => {
+    //cache will be based on an API Key. 
+    //access without API key will be rejected
+    console.log("[/employee_isc]")
+    let key_recv_primary = req.body.api_key_primary;    
+    
+    if(key_recv_primary === undefined || key_recv_primary === null || key_recv_primary =='' || key_recv_primary != api_key) {
+        res.status(401).send("Unauthorized access! Please use your API Key to use this service.\n")
+        return;
+    }
+
+    let api_key_isc = config.get('isc.api_key');
+    let key_recv_isc = req.body.api_key_secondary;
+
+    if(key_recv_isc === undefined || key_recv_isc === null || key_recv_isc =='' || key_recv_isc != api_key_isc) {
+        res.status(401).send("Unauthorized access! Please use your secondary API Key to use this inter service communicate service.")
+        return;
+    }
+
+    let query_length = Object.keys(req.body).length;
+    if(query_length > 3) {
+        res.status(400).send("<h1>Query error!</h1><p>For now, query is based on <b>one</b> key=value only.</p><p>E.g. job_title=Manager. job_title=Manager&email=example@example.com will produce this query error.</p>")
+        return;
+    }
+
+    //Values from config file
+    let isc_host = config.get("isc.host");
+    let isc_port = config.get("isc.port");
+    let url = `http://${isc_host}:${isc_port}/employee?`;
+
+    if(query_length > 1) {
+        //iterates
+        for(key in req.body) {
+            if(key =="api_key_primary" || key =="api_key_secondary") {                                
+                continue;
+            }            
+            url += `${key}=${req.body[key]}&`;
+        }        
+    }
+
+    url += `api_key=${api_key_isc}`;    
+
+    try {
+        let sync_res = sync_request('GET', url);    
+        let data = JSON.parse(sync_res.getBody('utf8'));
+        data.job_title = decrypt(data.job_title);
+        data.email_address = decrypt(data.email_address);
+        data.firstName_LastName = decrypt(data.firstName_LastName);    
+        res.json(data);        
+    } catch {
+        res.status(400).send("<h1>Bad Request</h1>")
+    }    
+});
+
 app.get('/employees_isc', async (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected

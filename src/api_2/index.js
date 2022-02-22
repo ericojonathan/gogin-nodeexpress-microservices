@@ -245,6 +245,85 @@ app.post('/employees', (req, res) => {
     httpreq.end();     
 });
 
+app.get('/employee', (req, res) => {
+    //cache will be based on an API Key. 
+    //access without API key will be rejected
+    console.log("[get /employees]")
+    let key_recv = req.query.api_key;
+    if(key_recv === undefined || key_recv === null || key_recv =='' || key_recv != api_key) {
+        res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
+        return;
+    }
+
+    let query_length = Object.keys(req.query).length;
+    if(query_length > 2) {
+        res.status(400).send("<h1>Query error!</h1><p>For now, query is based on <b>one</b> key=value only.</p><p>E.g. job_title=Manager. job_title=Manager&email=example@example.com will produce this query error.</p>")
+        return;
+    }
+
+    let key_encr = encrypt(api_key);
+    let url = `http://${be_host}:${be_port}/employee_encr?`;
+    let columns = ["id","job_title","email_address", "firstName_LastName"];
+    let containsCol = false;
+
+    if(query_length > 1) {
+        //iterates
+        for(key in req.query) {
+            if(key =="api_key") {                                
+                continue;
+            }
+            if(!containsCol) {
+                if(columns.includes(key)) {
+                    containsCol = true;
+                }
+            }
+            
+            url += `${key}=${req.query[key]}&`;
+        }        
+    }
+
+    if(!containsCol) {
+        res.status(400).send("<h1>Query error!</h1><p>At least one column must be included in the query.</p>")
+        return;
+    }
+
+    url += `api_key=${key_encr}`;
+    request(url, function (error, response, body) {
+        
+        if(error !== null) {
+            console.log("error.status: " + error.status)
+            res.status(error.status || 500).send({
+                error: {
+                  status: error.status || 500,
+                  message: 'Service Error',
+                },
+            });
+            return;
+        } else if(error === null && body.trim() =='') {
+            res.status(404).send({
+                error: {
+                  status: 404,
+                  message: 'Not Found',
+                },
+            });
+            return;
+        }
+                
+        let data = JSON.parse(body);    
+        
+        for(let i = 0; i < data.length; i++) {
+            let obj = data[i];
+            for(let key in obj) {
+                if(key != "id") {
+                    obj[key] = decrypt(obj[key]);
+                }
+            }
+        }
+
+        res.json(data)        
+    })
+});
+
 app.get('/employees', (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
