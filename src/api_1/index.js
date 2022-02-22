@@ -248,6 +248,7 @@ app.post('/employees', (req, res) => {
 app.get('/employees', (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
+    console.log("[get /employees]")
     let key_recv = req.query.api_key;
     if(key_recv === undefined || key_recv === null || key_recv =='' || key_recv != api_key) {
         res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
@@ -382,7 +383,8 @@ app.get('/employees_async', async (req, res) => {
         //     }
         // }
 
-        res.json(data)        
+        res.json(data)
+        return        
     })
 })
 

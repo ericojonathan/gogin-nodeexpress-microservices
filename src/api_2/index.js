@@ -248,6 +248,7 @@ app.post('/employees', (req, res) => {
 app.get('/employees', (req, res) => {
     //cache will be based on an API Key. 
     //access without API key will be rejected
+    console.log("[get /employees]")
     let key_recv = req.query.api_key;
     if(key_recv === undefined || key_recv === null || key_recv =='' || key_recv != api_key) {
         res.status(401).send("Unauthorized access! Please use your API Key to use this service.")
@@ -260,9 +261,13 @@ app.get('/employees', (req, res) => {
         return;
     }
 
+    console.log("[TEST 1]")
+
     let key_encr = encrypt(api_key);
     let url = `http://${be_host}:${be_port}/employees_encr?`;
     
+    console.log("url_1: " + url);
+
     if(query_length > 1) {
         //iterates
         for(key in req.query) {
@@ -273,6 +278,7 @@ app.get('/employees', (req, res) => {
         }        
     } 
     url += `api_key=${key_encr}`;
+    console.log("url_2: " + url);
     request(url, function (error, response, body) {
         
         if(error !== null) {
