@@ -150,8 +150,8 @@ app.put('/employees', (req, res) => {
         return;
     }
 
-    //email address format
-    //other checks, e.g. acceptable job titles, etc.
+    //TODO: email address format
+    //TODO: other checks, e.g. acceptable job titles, etc.
     emp_id = encrypt(emp_id)
     job_title = encrypt(job_title);
     email_address = encrypt(email_address);
@@ -207,8 +207,8 @@ app.post('/employees', (req, res) => {
         return;
     }
 
-    //email address format
-    //other checks, e.g. acceptable job titles, etc.
+    //TODO: email address format
+    //TODO: other checks, e.g. acceptable job titles, etc.
 
     job_title = encrypt(job_title);
     email_address = encrypt(email_address);
@@ -341,7 +341,7 @@ app.get('/employee_isc', (req, res) => {
     let url = `http://${isc_host}:${isc_port}/employee?`;
 
     if(query_length > 1) {
-        //iterates
+        
         for(key in req.body) {
             if(key =="api_key_primary" || key =="api_key_secondary") {                                
                 continue;
