@@ -20,10 +20,10 @@ var (
 
 func init() {
 	
-	ROOT_DIR := "/home/eric/job_tests/k.digital/src/be"
+	//ROOT_DIR := "/home/eric/job_tests/k.digital_gogin_nodeexpress/src/be"
 	Conf = viper.New()
-	//Conf.SetConfigFile("/home/eric/job_tests/k.digital/src/be/config/default.json")	
-	Conf.SetConfigFile(ROOT_DIR + "/config/default.json")	
+	Conf.SetConfigFile("/home/eric/job_tests/k.digital_gogin_nodeexpress/src/be/config/default.json")	
+	//Conf.SetConfigFile(ROOT_DIR + "/config/default.json")	
 
 	err := Conf.ReadInConfig()	
 	if err != nil {
