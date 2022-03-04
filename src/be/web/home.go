@@ -17,7 +17,7 @@ import (
 	"net/http"
 	
     _ "github.com/go-sql-driver/mysql"	
-	"github.com/ericojonathan/gogin-nodeexpress-microservices"	
+	// "github.com/ericojonathan/gogin-nodeexpress-microservices"	
 )
 
 var (
