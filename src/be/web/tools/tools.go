@@ -22,7 +22,7 @@ func init() {
 	
 	//ROOT_DIR := "/home/eric/job_tests/k.digital_gogin_nodeexpress/src/be"
 	Conf = viper.New()
-	Conf.SetConfigFile("/home/eric/job_tests/k.digital_gogin_nodeexpress/src/be/config/default.json")	
+	Conf.SetConfigFile("../config/default.json")		
 	//Conf.SetConfigFile(ROOT_DIR + "/config/default.json")	
 
 	err := Conf.ReadInConfig()	
