@@ -12,7 +12,7 @@ import (
 	"github.com/go-redis/redis_rate/v9"	
 	"github.com/spf13/viper"		
 	"log"
-	"os"
+	// "os"
 	"strings"
 	"net/http"
 	
@@ -620,12 +620,8 @@ func home(c *gin.Context) {
 func Init() {
 		
 	Conf = viper.New()		
-	//get current path and add config from there
-	gopath := os.Getenv("GOPATH")
-	fmt.Println("GOPATH: " + gopath)
-	Conf.SetConfigFile("/home/eric/job_tests/k.digital_gogin_nodeexpress/src/be/config/default.json")		
-	//Conf.SetConfigFile("config/default.json")	
-	
+	//get current path and add config from there	
+	Conf.SetConfigFile("../config/default.json")				
 	err := Conf.ReadInConfig()	
 	if err != nil {
 		fmt.Println(err)
